@@ -10,11 +10,15 @@
 <body>
   <div class="layout">
 
+    <!-- Mobile sidebar overlay -->
+    <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
     <!-- Sidebar -->
     <aside class="sidebar">
       <div class="sidebar-header">
         <span class="logo-icon">⚓</span>
         <span class="logo-text">Boat Platform</span>
+        <button id="sidebar-close" class="sidebar-close" aria-label="Close menu">✕</button>
       </div>
       <div class="sidebar-section-label">VESSELS</div>
       <ul id="vessel-list" class="vessel-list">
@@ -24,6 +28,15 @@
 
     <!-- Main -->
     <main class="main">
+
+      <!-- Mobile top bar -->
+      <div class="topbar">
+        <button id="menu-toggle" class="menu-toggle" aria-label="Open menu">
+          <span></span><span></span><span></span>
+        </button>
+        <span class="topbar-title">⚓ Boat Platform</span>
+        <div id="topbar-badge" class="status-badge hidden"></div>
+      </div>
 
       <!-- Empty state -->
       <div id="empty-state" class="empty-state">

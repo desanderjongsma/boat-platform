@@ -11,7 +11,29 @@ document.addEventListener('DOMContentLoaded', () => {
   loadVessels();
   setInterval(loadVessels, 10_000); // refresh vessel list every 10s
   setupTabs();
+  setupMobileDrawer();
 });
+
+// ── Mobile drawer ─────────────────────────────────────────────────────────────
+function setupMobileDrawer() {
+  const layout  = document.querySelector('.layout');
+  const toggle  = document.getElementById('menu-toggle');
+  const close   = document.getElementById('sidebar-close');
+  const overlay = document.getElementById('sidebar-overlay');
+
+  const open  = () => layout.classList.add('sidebar-open');
+  const shut  = () => layout.classList.remove('sidebar-open');
+
+  toggle?.addEventListener('click', open);
+  close?.addEventListener('click', shut);
+  overlay?.addEventListener('click', shut);
+}
+
+function closeSidebarOnMobile() {
+  if (window.innerWidth <= 768) {
+    document.querySelector('.layout').classList.remove('sidebar-open');
+  }
+}
 
 // ── Vessel list ───────────────────────────────────────────────────────────────
 async function loadVessels() {
@@ -80,6 +102,7 @@ function selectVessel(id) {
     activeSocket = null;
   }
 
+  closeSidebarOnMobile();
   connectWebSocket(id);
   loadTelemetryChart(id, activeTab.topic, activeTab.field, activeTab.label);
 }
@@ -134,9 +157,12 @@ function updateCards(d) {
 }
 
 function updateStatusBadge(online) {
-  const badge = document.getElementById('vessel-status-badge');
-  badge.textContent = online ? 'Online' : 'Offline';
-  badge.className = `status-badge ${online ? 'online' : 'offline'}`;
+  ['vessel-status-badge', 'topbar-badge'].forEach(id => {
+    const badge = document.getElementById(id);
+    if (!badge) return;
+    badge.textContent = online ? 'Online' : 'Offline';
+    badge.className = `status-badge ${online ? 'online' : 'offline'}`;
+  });
 }
 
 function setValue(id, text) {
