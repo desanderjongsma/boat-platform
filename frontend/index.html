@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Boat Platform</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span class="logo-icon">⚓</span>
+        <span class="logo-text">Boat Platform</span>
+      </div>
+      <div class="sidebar-section-label">VESSELS</div>
+      <ul id="vessel-list" class="vessel-list">
+        <li class="vessel-item skeleton">Loading...</li>
+      </ul>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+
+      <!-- Empty state -->
+      <div id="empty-state" class="empty-state">
+        <div class="empty-icon">⚓</div>
+        <div class="empty-title">Select a vessel</div>
+        <div class="empty-sub">Choose a vessel from the sidebar to view its live data</div>
+      </div>
+
+      <!-- Dashboard (hidden until vessel selected) -->
+      <div id="dashboard" class="dashboard hidden">
+
+        <!-- Vessel header -->
+        <div class="vessel-header">
+          <div class="vessel-header-left">
+            <h1 id="vessel-title">—</h1>
+            <div id="vessel-last-seen" class="last-seen">—</div>
+          </div>
+          <div id="vessel-status-badge" class="status-badge offline">Offline</div>
+        </div>
+
+        <!-- Cards grid -->
+        <div class="cards-grid">
+
+          <!-- Engine -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-icon">⚙️</span>
+              <span class="card-title">Engine</span>
+            </div>
+            <div class="card-body">
+              <div class="metric">
+                <span class="metric-label">RPM</span>
+                <span id="m-rpm" class="metric-value">—</span>
+              </div>
+              <div class="metric">
+                <span class="metric-label">Coolant Temp</span>
+                <span id="m-coolant" class="metric-value">—</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Electrical -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-icon">⚡</span>
+              <span class="card-title">Electrical</span>
+            </div>
+            <div class="card-body">
+              <div class="metric">
+                <span class="metric-label">Battery Voltage</span>
+                <span id="m-voltage" class="metric-value">—</span>
+              </div>
+              <div class="metric">
+                <span class="metric-label">State of Charge</span>
+                <span id="m-soc" class="metric-value">—</span>
+              </div>
+              <div class="soc-bar-wrap">
+                <div id="soc-bar" class="soc-bar" style="width:0%"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Navigation -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-icon">🧭</span>
+              <span class="card-title">Navigation</span>
+            </div>
+            <div class="card-body">
+              <div class="metric">
+                <span class="metric-label">Latitude</span>
+                <span id="m-lat" class="metric-value">—</span>
+              </div>
+              <div class="metric">
+                <span class="metric-label">Longitude</span>
+                <span id="m-lon" class="metric-value">—</span>
+              </div>
+              <div class="metric">
+                <span class="metric-label">Water Depth</span>
+                <span id="m-depth" class="metric-value">—</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Connection -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-icon">📡</span>
+              <span class="card-title">Connection</span>
+            </div>
+            <div class="card-body">
+              <div class="metric">
+                <span class="metric-label">Status</span>
+                <span id="m-online" class="metric-value">—</span>
+              </div>
+              <div class="metric">
+                <span class="metric-label">Last Seen</span>
+                <span id="m-lastseen" class="metric-value">—</span>
+              </div>
+              <div class="metric">
+                <span class="metric-label">Vessel ID</span>
+                <span id="m-vesselid" class="metric-value mono">—</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Telemetry charts -->
+        <div class="charts-section">
+          <div class="charts-header">
+            <h2>Telemetry History</h2>
+            <div class="chart-tabs">
+              <button class="tab-btn active" data-topic="engine/rapid" data-field="rpm" data-label="RPM">RPM</button>
+              <button class="tab-btn" data-topic="electrical/battery" data-field="battery_voltage" data-label="Battery V">Battery V</button>
+              <button class="tab-btn" data-topic="electrical/battery" data-field="battery_soc" data-label="SOC %">SOC %</button>
+              <button class="tab-btn" data-topic="navigation/depth" data-field="depth_m" data-label="Depth">Depth</button>
+              <button class="tab-btn" data-topic="engine/parameters" data-field="coolant_temp_c" data-label="Coolant °C">Coolant °C</button>
+            </div>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="telemetry-chart"></canvas>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
