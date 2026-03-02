@@ -1,0 +1,70 @@
+services:
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: boat-mqtt
+    ports:
+      - "1883:1883"
+      - "8883:8883"
+      - "9001:9001"
+    volumes:
+      - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ./config/mosquitto_passwd:/mosquitto/config/passwd
+      - mqtt_data:/mosquitto/data
+      - mqtt_log:/mosquitto/log
+    restart: unless-stopped
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: boat-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: boatplatform
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme_db}
+      POSTGRES_DB: boats
+    volumes:
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/01_init.sql
+      - db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile.bridge
+    container_name: boat-bridge
+    depends_on:
+      - mqtt
+      - timescaledb
+    environment:
+      MQTT_BROKER: mqtt
+      MQTT_PORT: 1883
+      DB_HOST: timescaledb
+      DB_PORT: 5432
+      DB_NAME: boats
+      DB_USER: boatplatform
+      DB_PASSWORD: ${DB_PASSWORD:-changeme_db}
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: boat-api
+    ports:
+      - "8000:8000"
+    depends_on:
+      - timescaledb
+    environment:
+      DB_HOST: timescaledb
+      DB_PORT: 5432
+      DB_NAME: boats
+      DB_USER: boatplatform
+      DB_PASSWORD: ${DB_PASSWORD:-changeme_db}
+      MQTT_BROKER: mqtt
+      MQTT_PORT: 1883
+    restart: unless-stopped
+
+volumes:
+  mqtt_data:
+  mqtt_log:
+  db_data:
