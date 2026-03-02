@@ -1,0 +1,14 @@
+[Unit]
+Description=Connected Boat Edge Agent
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/opt/edge-agent
+ExecStart=/usr/bin/python3 /opt/edge-agent/src/main.py --config /opt/edge-agent/config/config.yaml
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,56 @@
+vessel:
+  id: "damsko750-200"
+  name: "Damsko 750 #200"
+
+can:
+  interface: "can0"
+  bustype: "socketcan"
+  bitrate: 250000
+
+mqtt:
+  broker: "37.97.145.176"
+  port: 1883
+  use_tls: false
+  client_id: "edge-damsko750-200"
+  topic_prefix: "vessels/damsko750-200"
+  reconnect_interval: 5
+
+buffer:
+  db_path: "/opt/edge-agent/data/buffer.db"
+  max_messages: 100000
+  drain_batch_size: 50
+  drain_interval: 2
+
+pgn:
+  subscriptions:
+    - pgn: 127488
+      topic: "engine/rapid"
+      sample_interval: 1
+    - pgn: 127489
+      topic: "engine/parameters"
+      sample_interval: 5
+    - pgn: 129029
+      topic: "navigation/gnss"
+      sample_interval: 2
+    - pgn: 129026
+      topic: "navigation/sog_cog"
+      sample_interval: 2
+    - pgn: 128259
+      topic: "navigation/speed"
+      sample_interval: 2
+    - pgn: 128267
+      topic: "navigation/depth"
+      sample_interval: 5
+    - pgn: 127508
+      topic: "electrical/battery"
+      sample_interval: 10
+    - pgn: 127506
+      topic: "electrical/dc_status"
+      sample_interval: 10
+
+health:
+  heartbeat_interval: 30
+  topic: "system/status"
+
+logging:
+  level: "INFO"
