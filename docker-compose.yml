@@ -64,6 +64,17 @@ services:
       MQTT_PORT: 1883
     restart: unless-stopped
 
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: boat-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
 volumes:
   mqtt_data:
   mqtt_log:
