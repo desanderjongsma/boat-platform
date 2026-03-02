@@ -1,5 +1,5 @@
-const API = 'http://localhost:8000';
-const WS  = 'ws://localhost:8000';
+const API = `${window.location.protocol}//${window.location.hostname}:8000`;
+const WS  = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.hostname}:8000`;
 
 let activeVesselId = null;
 let activeSocket   = null;
