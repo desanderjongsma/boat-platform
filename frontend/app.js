@@ -332,9 +332,20 @@ async function loadAlerts() {
     history = await r2.json();
   } catch { /* network error - leave empty */ }
 
+  renderAlertStats(active);
   renderActiveAlerts(active);
   renderHistoryAlerts(history);
   updateAlertBadge(active.length);
+}
+
+function renderAlertStats(active) {
+  const critical = active.filter(a => a.severity === 'critical').length;
+  const warning  = active.filter(a => a.severity === 'warning').length;
+  const info     = active.filter(a => a.severity === 'info').length;
+  document.getElementById('stat-total').textContent    = active.length;
+  document.getElementById('stat-critical').textContent = critical;
+  document.getElementById('stat-warning').textContent  = warning;
+  document.getElementById('stat-info').textContent     = info;
 }
 
 function renderActiveAlerts(alerts) {

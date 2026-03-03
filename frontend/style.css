@@ -311,6 +311,48 @@ html, body { height: 100%; background: var(--bg-base); color: var(--text-primary
 /* ── Alerts view ─────────────────────────────────── */
 .alerts-view { display: flex; flex-direction: column; }
 
+/* ── Alert stat cards ────────────────────────────── */
+.alert-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--gap);
+  margin-bottom: 24px;
+}
+
+.alert-stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stat-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+}
+
+.stat-value {
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.alert-stat-card.stat-critical { border-top: 3px solid var(--red); }
+.alert-stat-card.stat-critical .stat-value { color: var(--red); }
+
+.alert-stat-card.stat-warning { border-top: 3px solid var(--yellow); }
+.alert-stat-card.stat-warning .stat-value { color: var(--yellow); }
+
+.alert-stat-card.stat-info { border-top: 3px solid var(--accent); }
+.alert-stat-card.stat-info .stat-value { color: var(--accent); }
+
 /* ── Severity badges ─────────────────────────────── */
 .sev-badge {
   display: inline-block;
@@ -675,4 +717,8 @@ html, body { height: 100%; background: var(--bg-base); color: var(--text-primary
 
   /* Form grid single column on mobile */
   .form-grid { grid-template-columns: 1fr; }
+
+  /* Alert stats 2 columns on mobile */
+  .alert-stats-row { grid-template-columns: repeat(2, 1fr); }
+  .stat-value { font-size: 28px; }
 }

@@ -50,8 +50,28 @@
       <!-- Alerts Dashboard -->
       <div id="alerts-view" class="alerts-view hidden">
         <div class="page-header">
-          <h1>Alerts</h1>
+          <h1>Alerts Dashboard</h1>
           <button class="btn-ghost" onclick="loadAlerts()">↻ Refresh</button>
+        </div>
+
+        <!-- Summary stat cards -->
+        <div class="alert-stats-row">
+          <div class="alert-stat-card">
+            <div class="stat-label">Active</div>
+            <div id="stat-total" class="stat-value">—</div>
+          </div>
+          <div class="alert-stat-card stat-critical">
+            <div class="stat-label">Critical</div>
+            <div id="stat-critical" class="stat-value">—</div>
+          </div>
+          <div class="alert-stat-card stat-warning">
+            <div class="stat-label">Warning</div>
+            <div id="stat-warning" class="stat-value">—</div>
+          </div>
+          <div class="alert-stat-card stat-info">
+            <div class="stat-label">Info</div>
+            <div id="stat-info" class="stat-value">—</div>
+          </div>
         </div>
 
         <div class="section-block">
