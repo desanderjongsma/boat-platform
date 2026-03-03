@@ -24,6 +24,15 @@
       <ul id="vessel-list" class="vessel-list">
         <li class="vessel-item skeleton">Loading...</li>
       </ul>
+
+      <div class="sidebar-section-label">MONITORING</div>
+      <ul class="nav-list">
+        <li class="nav-item" id="nav-alerts" onclick="showAlertsView()">
+          <span class="nav-icon">🔔</span>
+          <span class="nav-label">Alerts</span>
+          <span id="alerts-count-badge" class="alerts-count-badge hidden">0</span>
+        </li>
+      </ul>
     </aside>
 
     <!-- Main -->
@@ -36,6 +45,29 @@
         </button>
         <span class="topbar-title">⚓ Boat Platform</span>
         <div id="topbar-badge" class="status-badge hidden"></div>
+      </div>
+
+      <!-- Alerts Dashboard -->
+      <div id="alerts-view" class="alerts-view hidden">
+        <div class="page-header">
+          <h1>Alerts</h1>
+          <button class="btn-ghost" onclick="loadAlerts()">↻ Refresh</button>
+        </div>
+
+        <div class="section-block">
+          <div class="section-title-row">
+            <h2 class="section-title">Active Alerts</h2>
+            <span id="active-count-chip" class="count-chip">0</span>
+          </div>
+          <div id="active-alerts-container"><p class="empty-hint">No active alerts</p></div>
+        </div>
+
+        <div class="section-block">
+          <div class="section-title-row">
+            <h2 class="section-title">Recent History</h2>
+          </div>
+          <div id="history-alerts-container"><p class="empty-hint">No recent alerts</p></div>
+        </div>
       </div>
 
       <!-- Empty state -->
@@ -145,6 +177,9 @@
 
         </div>
 
+        <!-- Active alerts banner (for selected vessel) -->
+        <div id="vessel-alerts-banner" class="vessel-alerts-banner hidden"></div>
+
         <!-- Telemetry charts -->
         <div class="charts-section">
           <div class="charts-header">
@@ -160,6 +195,61 @@
           <div class="chart-wrap">
             <canvas id="telemetry-chart"></canvas>
           </div>
+        </div>
+
+        <!-- Alert rules section -->
+        <div class="alert-rules-section">
+          <div class="section-title-row">
+            <h2 class="section-title">Alert Rules</h2>
+            <button class="btn-add-rule" onclick="showAddRuleForm()">+ Add Rule</button>
+          </div>
+
+          <!-- Inline add-rule form -->
+          <div id="add-rule-form" class="add-rule-form hidden">
+            <div class="form-grid">
+              <div class="form-field">
+                <label>Name</label>
+                <input type="text" id="rule-name" placeholder="e.g. Coolant Too High" />
+              </div>
+              <div class="form-field">
+                <label>Metric</label>
+                <select id="rule-metric">
+                  <option value="coolant_temp_c">Coolant Temperature (°C)</option>
+                  <option value="rpm">Engine RPM</option>
+                  <option value="battery_voltage">Battery Voltage (V)</option>
+                  <option value="battery_soc">Battery SOC (%)</option>
+                  <option value="depth_m">Water Depth (m)</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label>Condition</label>
+                <select id="rule-operator">
+                  <option value="gt">greater than (&gt;)</option>
+                  <option value="lt">less than (&lt;)</option>
+                  <option value="gte">≥ greater or equal</option>
+                  <option value="lte">≤ less or equal</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label>Threshold</label>
+                <input type="number" id="rule-threshold" placeholder="0" step="any" />
+              </div>
+              <div class="form-field">
+                <label>Severity</label>
+                <select id="rule-severity">
+                  <option value="warning">Warning</option>
+                  <option value="critical">Critical</option>
+                  <option value="info">Info</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="btn-primary" onclick="saveAlertRule()">Save Rule</button>
+              <button class="btn-ghost" onclick="hideAddRuleForm()">Cancel</button>
+            </div>
+          </div>
+
+          <div id="alert-rules-list"><p class="empty-hint">No alert rules configured</p></div>
         </div>
 
       </div>

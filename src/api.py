@@ -3,10 +3,12 @@ import asyncio
 import logging
 from datetime import datetime
 from contextlib import asynccontextmanager
+from typing import Optional
 
 import asyncpg
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("api")
@@ -91,6 +93,101 @@ async def websocket_endpoint(websocket: WebSocket, vessel_id: str):
             await asyncio.sleep(1)
     except WebSocketDisconnect:
         pass
+
+# ── Pydantic models ───────────────────────────────────────────────────────────
+
+class AlertRuleCreate(BaseModel):
+    name: str
+    metric: str
+    operator: str
+    threshold: float
+    severity: str = "warning"
+
+class AlertRuleToggle(BaseModel):
+    enabled: bool
+
+# ── Alert rules ───────────────────────────────────────────────────────────────
+
+@app.get("/api/vessels/{vessel_id}/alert-rules")
+async def list_alert_rules(vessel_id: str):
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT * FROM alert_rules WHERE vessel_id = $1 ORDER BY created_at DESC",
+            vessel_id
+        )
+        return [dict(r) for r in rows]
+
+@app.post("/api/vessels/{vessel_id}/alert-rules", status_code=201)
+async def create_alert_rule(vessel_id: str, rule: AlertRuleCreate):
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """INSERT INTO alert_rules (vessel_id, name, metric, operator, threshold, severity)
+               VALUES ($1, $2, $3, $4, $5, $6) RETURNING *""",
+            vessel_id, rule.name, rule.metric, rule.operator, rule.threshold, rule.severity
+        )
+        return dict(row)
+
+@app.patch("/api/alert-rules/{rule_id}")
+async def toggle_alert_rule(rule_id: int, body: AlertRuleToggle):
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "UPDATE alert_rules SET enabled = $1 WHERE id = $2 RETURNING *",
+            body.enabled, rule_id
+        )
+        if not row:
+            raise HTTPException(404, "Rule not found")
+        return dict(row)
+
+@app.delete("/api/alert-rules/{rule_id}", status_code=204)
+async def delete_alert_rule(rule_id: int):
+    async with db_pool.acquire() as conn:
+        result = await conn.execute("DELETE FROM alert_rules WHERE id = $1", rule_id)
+        if result == "DELETE 0":
+            raise HTTPException(404, "Rule not found")
+
+# ── Alerts ────────────────────────────────────────────────────────────────────
+
+@app.get("/api/alerts")
+async def list_alerts(
+    vessel_id: Optional[str] = None,
+    active: Optional[bool] = None,
+    limit: int = Query(default=50, le=200)
+):
+    async with db_pool.acquire() as conn:
+        conditions, params = [], []
+        if vessel_id:
+            params.append(vessel_id)
+            conditions.append(f"vessel_id = ${len(params)}")
+        if active is True:
+            conditions.append("resolved_at IS NULL")
+        elif active is False:
+            conditions.append("resolved_at IS NOT NULL")
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        params.append(limit)
+        rows = await conn.fetch(
+            f"SELECT * FROM alerts {where} ORDER BY triggered_at DESC LIMIT ${len(params)}",
+            *params
+        )
+        result = []
+        for r in rows:
+            d = dict(r)
+            for k, v in d.items():
+                if isinstance(v, datetime):
+                    d[k] = v.isoformat()
+            result.append(d)
+        return result
+
+@app.post("/api/alerts/{alert_id}/acknowledge")
+async def acknowledge_alert(alert_id: int):
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """UPDATE alerts SET acknowledged = TRUE, acknowledged_at = NOW()
+               WHERE id = $1 RETURNING id""",
+            alert_id
+        )
+        if not row:
+            raise HTTPException(404, "Alert not found")
+        return {"ok": True}
 
 @app.get("/api/health")
 async def health_check():

@@ -28,6 +28,60 @@ def get_db_connection():
             time.sleep(2)
     raise RuntimeError("Could not connect to database")
 
+def check_condition(value, operator, threshold):
+    if operator == 'gt':  return value > threshold
+    if operator == 'lt':  return value < threshold
+    if operator == 'gte': return value >= threshold
+    if operator == 'lte': return value <= threshold
+    return False
+
+def evaluate_alerts(conn, vessel_id):
+    """Check all enabled alert rules for a vessel against current status."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM vessel_status WHERE vessel_id = %s", (vessel_id,))
+            row = cur.fetchone()
+            if not row:
+                return
+            status = dict(zip([d[0] for d in cur.description], row))
+
+            cur.execute(
+                "SELECT id, name, metric, operator, threshold, severity "
+                "FROM alert_rules WHERE vessel_id = %s AND enabled = TRUE",
+                (vessel_id,)
+            )
+            rules = [dict(zip([d[0] for d in cur.description], r)) for r in cur.fetchall()]
+
+            for rule in rules:
+                val = status.get(rule['metric'])
+                if val is None:
+                    continue
+                triggered = check_condition(val, rule['operator'], rule['threshold'])
+
+                cur.execute(
+                    "SELECT id FROM alerts WHERE rule_id = %s AND resolved_at IS NULL",
+                    (rule['id'],)
+                )
+                active = cur.fetchone()
+
+                if triggered and not active:
+                    cur.execute(
+                        "INSERT INTO alerts (vessel_id, rule_id, rule_name, metric, value, "
+                        "threshold, operator, severity) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                        (vessel_id, rule['id'], rule['name'], rule['metric'],
+                         val, rule['threshold'], rule['operator'], rule['severity'])
+                    )
+                    logger.info("Alert triggered: %s (vessel=%s, value=%s)", rule['name'], vessel_id, val)
+                elif not triggered and active:
+                    cur.execute(
+                        "UPDATE alerts SET resolved_at = NOW() WHERE id = %s", (active[0],)
+                    )
+                    logger.info("Alert resolved: %s (vessel=%s)", rule['name'], vessel_id)
+        conn.commit()
+    except Exception:
+        logger.exception("Alert evaluation failed")
+        conn.rollback()
+
 def on_connect(client, userdata, flags, reason_code, properties):
     if reason_code == 0:
         logger.info("Connected to MQTT broker")
@@ -81,6 +135,8 @@ def on_message(client, userdata, msg):
                     [vessel_id] + list(updates.values()) + list(updates.values())
                 )
         conn.commit()
+        if updates:
+            evaluate_alerts(conn, vessel_id)
     except Exception:
         logger.exception("DB write failed")
         conn.rollback()
