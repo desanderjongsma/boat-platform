@@ -170,7 +170,7 @@ function updateCards(d) {
 
   // Online status
   setValue('m-online', d.online ? 'Online' : 'Offline');
-  document.getElementById('m-online').style.color = d.online ? 'var(--green)' : 'var(--red)';
+  document.getElementById('m-online').style.color = d.online ? '#16A34A' : '#DC2626';
 
   // Last seen
   const ls = d.last_seen ? formatRelative(d.last_seen) : '—';
@@ -231,12 +231,12 @@ function renderChart(labels, data, label) {
       datasets: [{
         label,
         data,
-        borderColor: '#3b82f6',
-        backgroundColor: 'rgba(59,130,246,0.08)',
+        borderColor: '#1A4AC4',
+        backgroundColor: 'rgba(26,74,196,0.06)',
         borderWidth: 2,
         pointRadius: 3,
         pointHoverRadius: 5,
-        pointBackgroundColor: '#3b82f6',
+        pointBackgroundColor: '#1A4AC4',
         fill: true,
         tension: 0.3,
         spanGaps: true,
@@ -249,22 +249,22 @@ function renderChart(labels, data, label) {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: '#1c2230',
-          borderColor: '#2d3748',
+          backgroundColor: '#FFFFFF',
+          borderColor: '#DDE3EF',
           borderWidth: 1,
-          titleColor: '#8892a4',
-          bodyColor: '#e2e8f0',
+          titleColor: '#6E87A8',
+          bodyColor: '#0E1E3A',
           padding: 10,
         }
       },
       scales: {
         x: {
-          ticks: { color: '#4a5568', maxRotation: 0, maxTicksLimit: 8 },
-          grid:  { color: '#1f2937' },
+          ticks: { color: '#9DAFC8', maxRotation: 0, maxTicksLimit: 8 },
+          grid:  { color: '#EBF0FA' },
         },
         y: {
-          ticks: { color: '#4a5568' },
-          grid:  { color: '#1f2937' },
+          ticks: { color: '#9DAFC8' },
+          grid:  { color: '#EBF0FA' },
         }
       }
     }
