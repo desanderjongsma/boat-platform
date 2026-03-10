@@ -16,6 +16,9 @@ DB_NAME = os.getenv("DB_NAME", "boats")
 DB_USER = os.getenv("DB_USER", "boatplatform")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "changeme_db")
 
+# Track vessels already registered in this session to avoid redundant DB calls
+_registered_vessels: set = set()
+
 def get_db_connection():
     for attempt in range(30):
         try:
@@ -27,6 +30,51 @@ def get_db_connection():
             logger.warning("DB not ready, retrying... (%d/30)", attempt + 1)
             time.sleep(2)
     raise RuntimeError("Could not connect to database")
+
+def ensure_vessel_profile(conn, vessel_id):
+    """Auto-register a vessel profile on first contact."""
+    if vessel_id in _registered_vessels:
+        return
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO vessel_profiles (vessel_id) VALUES (%s) ON CONFLICT DO NOTHING",
+                (vessel_id,)
+            )
+        conn.commit()
+        _registered_vessels.add(vessel_id)
+        logger.info("Vessel registered: %s", vessel_id)
+    except Exception:
+        logger.exception("Failed to register vessel profile")
+        conn.rollback()
+
+def update_vessel_nmea_info(conn, vessel_id, fields):
+    """Update NMEA auto-detected product info on the vessel profile."""
+    updates = {}
+    if fields.get("product_name"):
+        updates["nmea_product_name"] = fields["product_name"]
+    if fields.get("manufacturer_code"):
+        updates["nmea_manufacturer_code"] = str(fields["manufacturer_code"])
+    if fields.get("model_id"):
+        updates["nmea_model_id"] = fields["model_id"]
+    if fields.get("software_version"):
+        updates["nmea_software_version"] = fields["software_version"]
+    if fields.get("serial_number"):
+        updates["nmea_serial_number"] = fields["serial_number"]
+    if not updates:
+        return
+    try:
+        with conn.cursor() as cur:
+            set_clause = ", ".join([f"{k} = %s" for k in updates])
+            cur.execute(
+                f"UPDATE vessel_profiles SET {set_clause}, updated_at = NOW() WHERE vessel_id = %s",
+                list(updates.values()) + [vessel_id]
+            )
+        conn.commit()
+        logger.info("NMEA product info updated for vessel %s: %s", vessel_id, updates)
+    except Exception:
+        logger.exception("Failed to update NMEA info")
+        conn.rollback()
 
 def check_condition(value, operator, threshold):
     if operator == 'gt':  return value > threshold
@@ -105,6 +153,9 @@ def on_message(client, userdata, msg):
     pgn = payload.get("pgn", 0)
     fields = payload.get("fields", {})
 
+    # Auto-register vessel profile on first contact
+    ensure_vessel_profile(conn, vessel_id)
+
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -135,6 +186,11 @@ def on_message(client, userdata, msg):
                     [vessel_id] + list(updates.values()) + list(updates.values())
                 )
         conn.commit()
+
+        # Handle NMEA product info (PGN 126996)
+        if sub_topic == "system/product":
+            update_vessel_nmea_info(conn, vessel_id, fields)
+
         if updates:
             evaluate_alerts(conn, vessel_id)
     except Exception:

@@ -104,15 +104,17 @@ function selectVessel(id) {
   activeVesselId = id;
   currentView = 'dashboard';
 
-  // Highlight sidebar item, clear alerts nav active
+  // Highlight sidebar item, clear nav active states
   document.querySelectorAll('.vessel-item').forEach(el => {
     el.classList.toggle('active', el.dataset.id === id);
   });
   document.getElementById('nav-alerts').classList.remove('active');
+  document.getElementById('nav-settings').classList.remove('active');
 
   // Show dashboard, hide others
   document.getElementById('empty-state').classList.add('hidden');
   document.getElementById('alerts-view').classList.add('hidden');
+  document.getElementById('settings-view').classList.add('hidden');
   document.getElementById('dashboard').classList.remove('hidden');
 
   // Update vessel ID header
@@ -351,8 +353,10 @@ function showAlertsView() {
   currentView = 'alerts';
   document.querySelectorAll('.vessel-item').forEach(el => el.classList.remove('active'));
   document.getElementById('nav-alerts').classList.add('active');
+  document.getElementById('nav-settings').classList.remove('active');
   document.getElementById('empty-state').classList.add('hidden');
   document.getElementById('dashboard').classList.add('hidden');
+  document.getElementById('settings-view').classList.add('hidden');
   document.getElementById('alerts-view').classList.remove('hidden');
   closeSidebarOnMobile();
   loadAlerts();
@@ -587,5 +591,277 @@ async function deleteAlertRule(ruleId) {
     loadAlertRules(activeVesselId);
   } catch {
     alert('Failed to delete rule.');
+  }
+}
+
+// ── Settings view ─────────────────────────────────────────────────────────────
+function showSettingsView() {
+  currentView = 'settings';
+  document.querySelectorAll('.vessel-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('nav-alerts').classList.remove('active');
+  document.getElementById('nav-settings').classList.add('active');
+  document.getElementById('empty-state').classList.add('hidden');
+  document.getElementById('dashboard').classList.add('hidden');
+  document.getElementById('alerts-view').classList.add('hidden');
+  document.getElementById('settings-view').classList.remove('hidden');
+  closeSidebarOnMobile();
+  loadSettingsProfiles();
+}
+
+async function loadSettingsProfiles() {
+  let profiles = [];
+  try {
+    const res = await fetch(`${API}/api/settings/profiles`);
+    profiles = await res.json();
+  } catch { /* offline */ }
+  renderSettingsProfiles(profiles);
+}
+
+function renderSettingsProfiles(profiles) {
+  const container = document.getElementById('vessel-profiles-list');
+  if (!profiles.length) {
+    container.innerHTML = '<p class="empty-hint">Geen vaartuigen gevonden. Zodra een boot verbinding maakt wordt deze hier weergegeven.</p>';
+    return;
+  }
+  container.innerHTML = profiles.map(p => buildProfileCard(p)).join('');
+}
+
+function buildProfileCard(p) {
+  const isOnline = p.last_seen && (Date.now() - new Date(p.last_seen)) < 60000;
+  const lastSeen = p.last_seen ? formatRelative(p.last_seen) : 'Nooit gezien';
+
+  const nmea = [
+    p.nmea_product_name   && `<span class="auto-chip">Product: ${p.nmea_product_name}</span>`,
+    p.nmea_model_id       && `<span class="auto-chip">Model: ${p.nmea_model_id}</span>`,
+    p.nmea_manufacturer_code && `<span class="auto-chip">Fabrikant code: ${p.nmea_manufacturer_code}</span>`,
+    p.nmea_software_version  && `<span class="auto-chip">SW: ${p.nmea_software_version}</span>`,
+    p.nmea_serial_number     && `<span class="auto-chip">S/N: ${p.nmea_serial_number}</span>`,
+  ].filter(Boolean).join('');
+
+  return `
+  <div class="profile-card" id="card-${p.vessel_id}">
+    <div class="profile-card-header" onclick="toggleProfileCard('${p.vessel_id}')">
+      <div class="profile-card-title">
+        <span class="vessel-dot ${isOnline ? 'online' : 'offline'}"></span>
+        <div>
+          <div class="profile-name">${p.name || p.vessel_id}</div>
+          <div class="profile-id">${p.vessel_id} &nbsp;·&nbsp; ${lastSeen}</div>
+        </div>
+      </div>
+      <span class="profile-chevron">▾</span>
+    </div>
+    <div class="profile-card-body hidden" id="body-${p.vessel_id}">
+
+      ${nmea ? `
+      <div class="auto-detected-section">
+        <div class="auto-section-label">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Auto-detected via NMEA2000
+        </div>
+        <div class="auto-chips">${nmea}</div>
+      </div>` : ''}
+
+      <div class="profile-sections">
+
+        <div class="profile-section">
+          <h3>Vaartuig</h3>
+          <div class="form-grid-3">
+            <div class="form-field">
+              <label>Naam</label>
+              <input type="text" id="${p.vessel_id}_name" value="${p.name || ''}" placeholder="Bijv. Damsko 750" />
+            </div>
+            <div class="form-field">
+              <label>Type</label>
+              <select id="${p.vessel_id}_vessel_type">
+                <option value="">— Selecteer —</option>
+                ${['Motorboot','Zeilboot','Catamaran','Trawler','Sloep','Jacht','Binnenvaarder','Overig'].map(t =>
+                  `<option value="${t}" ${p.vessel_type === t ? 'selected' : ''}>${t}</option>`
+                ).join('')}
+              </select>
+            </div>
+            <div class="form-field">
+              <label>Vlag</label>
+              <input type="text" id="${p.vessel_id}_flag" value="${p.flag || ''}" placeholder="NL" maxlength="3" />
+            </div>
+            <div class="form-field">
+              <label>Roepnaam</label>
+              <input type="text" id="${p.vessel_id}_call_sign" value="${p.call_sign || ''}" placeholder="PH-XXX" />
+            </div>
+            <div class="form-field">
+              <label>MMSI</label>
+              <input type="text" id="${p.vessel_id}_mmsi" value="${p.mmsi || ''}" placeholder="244xxxxxx" />
+            </div>
+            <div class="form-field">
+              <label>IMO</label>
+              <input type="text" id="${p.vessel_id}_imo" value="${p.imo || ''}" placeholder="IMO nummer" />
+            </div>
+            <div class="form-field">
+              <label>Registratienummer</label>
+              <input type="text" id="${p.vessel_id}_registration_number" value="${p.registration_number || ''}" placeholder="ENS / RVR nummer" />
+            </div>
+          </div>
+        </div>
+
+        <div class="profile-section">
+          <h3>Romp</h3>
+          <div class="form-grid-3">
+            <div class="form-field">
+              <label>Bouwjaar</label>
+              <input type="number" id="${p.vessel_id}_year_built" value="${p.year_built || ''}" placeholder="2005" />
+            </div>
+            <div class="form-field">
+              <label>Bouwer / Werf</label>
+              <input type="text" id="${p.vessel_id}_builder" value="${p.builder || ''}" placeholder="Bijv. Linssen" />
+            </div>
+            <div class="form-field">
+              <label>LOA (m)</label>
+              <input type="number" id="${p.vessel_id}_loa_m" value="${p.loa_m || ''}" placeholder="10.5" step="0.01" />
+            </div>
+            <div class="form-field">
+              <label>Breedte (m)</label>
+              <input type="number" id="${p.vessel_id}_beam_m" value="${p.beam_m || ''}" placeholder="3.8" step="0.01" />
+            </div>
+            <div class="form-field">
+              <label>Diepgang (m)</label>
+              <input type="number" id="${p.vessel_id}_draft_m" value="${p.draft_m || ''}" placeholder="0.9" step="0.01" />
+            </div>
+            <div class="form-field">
+              <label>Romp materiaal</label>
+              <select id="${p.vessel_id}_hull_material">
+                <option value="">— Selecteer —</option>
+                ${['Polyester','Staal','Aluminium','Hout','GVK/Composiet','Overig'].map(m =>
+                  `<option value="${m}" ${p.hull_material === m ? 'selected' : ''}>${m}</option>`
+                ).join('')}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="profile-section">
+          <h3>Voortstuwing</h3>
+          <div class="form-grid-3">
+            <div class="form-field">
+              <label>Motorfabrikant</label>
+              <input type="text" id="${p.vessel_id}_engine_manufacturer" value="${p.engine_manufacturer || ''}" placeholder="Volvo, Yanmar, Vetus…" />
+            </div>
+            <div class="form-field">
+              <label>Motortype / Model</label>
+              <input type="text" id="${p.vessel_id}_engine_model" value="${p.engine_model || ''}" placeholder="D2-55, 4JH4-TE…" />
+            </div>
+            <div class="form-field">
+              <label>Brandstof</label>
+              <select id="${p.vessel_id}_engine_type">
+                <option value="">— Selecteer —</option>
+                ${['Diesel','Benzine','Elektrisch','Hybride','LPG'].map(t =>
+                  `<option value="${t}" ${p.engine_type === t ? 'selected' : ''}>${t}</option>`
+                ).join('')}
+              </select>
+            </div>
+            <div class="form-field">
+              <label>Vermogen (kW)</label>
+              <input type="number" id="${p.vessel_id}_engine_power_kw" value="${p.engine_power_kw || ''}" placeholder="40" step="0.5" />
+            </div>
+            <div class="form-field">
+              <label>Serienummer</label>
+              <input type="text" id="${p.vessel_id}_engine_serial" value="${p.engine_serial || ''}" placeholder="Motor serienummer" />
+            </div>
+            <div class="form-field">
+              <label>Motorbouwjaar</label>
+              <input type="number" id="${p.vessel_id}_engine_year" value="${p.engine_year || ''}" placeholder="2010" />
+            </div>
+            <div class="form-field">
+              <label>Aantal motoren</label>
+              <select id="${p.vessel_id}_num_engines">
+                ${[1,2,3,4].map(n =>
+                  `<option value="${n}" ${(p.num_engines || 1) == n ? 'selected' : ''}>${n}</option>`
+                ).join('')}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="profile-section">
+          <h3>Elektrisch</h3>
+          <div class="form-grid-3">
+            <div class="form-field">
+              <label>Accucapaciteit (Ah)</label>
+              <input type="number" id="${p.vessel_id}_battery_capacity_ah" value="${p.battery_capacity_ah || ''}" placeholder="200" />
+            </div>
+            <div class="form-field">
+              <label>Accutype</label>
+              <select id="${p.vessel_id}_battery_type">
+                <option value="">— Selecteer —</option>
+                ${['AGM','Lithium (LiFePO4)','Gel','Nat (flooded)','Overig'].map(t =>
+                  `<option value="${t}" ${p.battery_type === t ? 'selected' : ''}>${t}</option>`
+                ).join('')}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="profile-section">
+          <h3>Notities</h3>
+          <div class="form-field full-width">
+            <textarea id="${p.vessel_id}_notes" rows="3" placeholder="Vrije notities over dit vaartuig…">${p.notes || ''}</textarea>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="profile-actions">
+        <button class="btn-primary" onclick="saveProfile('${p.vessel_id}')">Opslaan</button>
+        <span class="profile-save-status" id="save-status-${p.vessel_id}"></span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function toggleProfileCard(vesselId) {
+  const body = document.getElementById(`body-${vesselId}`);
+  const chevron = document.querySelector(`#card-${vesselId} .profile-chevron`);
+  const open = body.classList.toggle('hidden');
+  chevron.textContent = open ? '▾' : '▴';
+}
+
+async function saveProfile(vesselId) {
+  const fields = [
+    'name','vessel_type','flag','call_sign','mmsi','imo','registration_number',
+    'year_built','builder','loa_m','beam_m','draft_m','hull_material',
+    'engine_manufacturer','engine_model','engine_type','engine_power_kw',
+    'engine_serial','engine_year','num_engines',
+    'battery_capacity_ah','battery_type','notes',
+  ];
+
+  const body = {};
+  fields.forEach(f => {
+    const el = document.getElementById(`${vesselId}_${f}`);
+    if (!el) return;
+    const v = el.value.trim();
+    if (v === '') return;
+    const numFields = ['year_built','loa_m','beam_m','draft_m','engine_power_kw','engine_year','num_engines','battery_capacity_ah'];
+    body[f] = numFields.includes(f) ? parseFloat(v) : v;
+  });
+
+  const statusEl = document.getElementById(`save-status-${vesselId}`);
+  statusEl.textContent = 'Opslaan…';
+  statusEl.className = 'profile-save-status';
+
+  try {
+    await fetch(`${API}/api/vessels/${vesselId}/profile`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    statusEl.textContent = '✓ Opgeslagen';
+    statusEl.className = 'profile-save-status saved';
+    // Update the card header name if name was changed
+    if (body.name) {
+      const nameEl = document.querySelector(`#card-${vesselId} .profile-name`);
+      if (nameEl) nameEl.textContent = body.name;
+    }
+    setTimeout(() => { statusEl.textContent = ''; }, 3000);
+  } catch {
+    statusEl.textContent = '✗ Fout bij opslaan';
+    statusEl.className = 'profile-save-status error';
   }
 }

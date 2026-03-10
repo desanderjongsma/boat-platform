@@ -68,7 +68,27 @@ def decode_127508(data):
         "state_of_charge": round(soc * 0.004, 1) if soc != 0xFFFF else None,
     }
 
+def decode_126996(data):
+    """Product Information — manufacturer, model, software version, serial."""
+    def read_str(offset, length):
+        raw = data[offset:offset + length]
+        return raw.split(b'\xff')[0].split(b'\x00')[0].decode('ascii', errors='replace').strip()
+    if len(data) < 4: return {}
+    manufacturer_code = struct.unpack_from("<H", data, 2)[0] if len(data) >= 4 else None
+    model_id         = read_str(4,   32) if len(data) >= 36  else None
+    software_version = read_str(36,  32) if len(data) >= 68  else None
+    model_version    = read_str(68,  32) if len(data) >= 100 else None
+    serial_number    = read_str(100, 32) if len(data) >= 132 else None
+    return {
+        "manufacturer_code": manufacturer_code,
+        "product_name":      model_version or model_id,
+        "model_id":          model_id,
+        "software_version":  software_version,
+        "serial_number":     serial_number,
+    }
+
 PGN_DECODERS = {
+    126996: decode_126996,
     127488: decode_127488,
     127489: decode_127489,
     129029: decode_129029,

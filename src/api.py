@@ -23,6 +23,42 @@ DB_DSN = (
 
 db_pool = None
 
+MIGRATE_SQL = """
+CREATE TABLE IF NOT EXISTS vessel_profiles (
+    vessel_id               TEXT PRIMARY KEY,
+    name                    TEXT,
+    vessel_type             TEXT,
+    flag                    TEXT,
+    call_sign               TEXT,
+    mmsi                    TEXT,
+    imo                     TEXT,
+    registration_number     TEXT,
+    year_built              INTEGER,
+    builder                 TEXT,
+    loa_m                   FLOAT,
+    beam_m                  FLOAT,
+    draft_m                 FLOAT,
+    hull_material           TEXT,
+    engine_manufacturer     TEXT,
+    engine_model            TEXT,
+    engine_type             TEXT,
+    engine_power_kw         FLOAT,
+    engine_serial           TEXT,
+    engine_year             INTEGER,
+    num_engines             INTEGER DEFAULT 1,
+    battery_capacity_ah     FLOAT,
+    battery_type            TEXT,
+    nmea_product_name       TEXT,
+    nmea_manufacturer_code  TEXT,
+    nmea_model_id           TEXT,
+    nmea_software_version   TEXT,
+    nmea_serial_number      TEXT,
+    first_seen              TIMESTAMPTZ DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ DEFAULT NOW(),
+    notes                   TEXT
+);
+"""
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global db_pool
@@ -34,6 +70,9 @@ async def lifespan(app: FastAPI):
         except Exception:
             logger.warning("DB not ready, retrying... (%d/30)", attempt + 1)
             await asyncio.sleep(2)
+    async with db_pool.acquire() as conn:
+        await conn.execute(MIGRATE_SQL)
+        logger.info("Migrations applied")
     yield
     if db_pool:
         await db_pool.close()
@@ -101,7 +140,6 @@ async def websocket_endpoint(websocket: WebSocket, vessel_id: str):
                 if row:
                     data = {"vessel_id": vessel_id, "online": True}
                     data["last_seen"] = row["last_seen"].isoformat()
-                    # Haal meest recente waarde per topic
                     topics = await conn.fetch(
                         """SELECT DISTINCT ON (topic) topic, payload
                            FROM telemetry WHERE vessel_id = $1
@@ -139,6 +177,92 @@ class AlertRuleCreate(BaseModel):
 
 class AlertRuleToggle(BaseModel):
     enabled: bool
+
+class VesselProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    vessel_type: Optional[str] = None
+    flag: Optional[str] = None
+    call_sign: Optional[str] = None
+    mmsi: Optional[str] = None
+    imo: Optional[str] = None
+    registration_number: Optional[str] = None
+    year_built: Optional[int] = None
+    builder: Optional[str] = None
+    loa_m: Optional[float] = None
+    beam_m: Optional[float] = None
+    draft_m: Optional[float] = None
+    hull_material: Optional[str] = None
+    engine_manufacturer: Optional[str] = None
+    engine_model: Optional[str] = None
+    engine_type: Optional[str] = None
+    engine_power_kw: Optional[float] = None
+    engine_serial: Optional[str] = None
+    engine_year: Optional[int] = None
+    num_engines: Optional[int] = None
+    battery_capacity_ah: Optional[float] = None
+    battery_type: Optional[str] = None
+    notes: Optional[str] = None
+
+# ── Vessel profiles ───────────────────────────────────────────────────────────
+
+@app.get("/api/settings/profiles")
+async def list_profiles():
+    """All vessel profiles with last_seen from telemetry."""
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT vp.*, t.last_seen
+            FROM vessel_profiles vp
+            LEFT JOIN (
+                SELECT vessel_id, MAX(time) as last_seen
+                FROM telemetry GROUP BY vessel_id
+            ) t ON t.vessel_id = vp.vessel_id
+            ORDER BY t.last_seen DESC NULLS LAST
+        """)
+        result = []
+        for r in rows:
+            d = dict(r)
+            for k, v in d.items():
+                if isinstance(v, datetime):
+                    d[k] = v.isoformat()
+            result.append(d)
+        return result
+
+@app.get("/api/vessels/{vessel_id}/profile")
+async def get_profile(vessel_id: str):
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM vessel_profiles WHERE vessel_id = $1", vessel_id
+        )
+        if not row:
+            raise HTTPException(404, "Profile not found")
+        d = dict(row)
+        for k, v in d.items():
+            if isinstance(v, datetime):
+                d[k] = v.isoformat()
+        return d
+
+@app.put("/api/vessels/{vessel_id}/profile")
+async def upsert_profile(vessel_id: str, body: VesselProfileUpdate):
+    fields = {k: v for k, v in body.model_dump().items() if v is not None}
+    async with db_pool.acquire() as conn:
+        # Ensure row exists
+        await conn.execute(
+            "INSERT INTO vessel_profiles (vessel_id) VALUES ($1) ON CONFLICT DO NOTHING",
+            vessel_id
+        )
+        if fields:
+            set_parts = [f"{k} = ${i+2}" for i, k in enumerate(fields)]
+            set_parts.append("updated_at = NOW()")
+            await conn.execute(
+                f"UPDATE vessel_profiles SET {', '.join(set_parts)} WHERE vessel_id = $1",
+                vessel_id, *fields.values()
+            )
+        row = await conn.fetchrow("SELECT * FROM vessel_profiles WHERE vessel_id = $1", vessel_id)
+        d = dict(row)
+        for k, v in d.items():
+            if isinstance(v, datetime):
+                d[k] = v.isoformat()
+        return d
 
 # ── Alert rules ───────────────────────────────────────────────────────────────
 

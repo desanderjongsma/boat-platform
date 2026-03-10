@@ -51,3 +51,43 @@ CREATE TABLE IF NOT EXISTS alerts (
     acknowledged    BOOLEAN DEFAULT FALSE,
     acknowledged_at TIMESTAMPTZ
 );
+
+CREATE TABLE IF NOT EXISTS vessel_profiles (
+    vessel_id               TEXT PRIMARY KEY,
+    -- Identity
+    name                    TEXT,
+    vessel_type             TEXT,
+    flag                    TEXT,
+    call_sign               TEXT,
+    mmsi                    TEXT,
+    imo                     TEXT,
+    registration_number     TEXT,
+    -- Hull
+    year_built              INTEGER,
+    builder                 TEXT,
+    loa_m                   FLOAT,
+    beam_m                  FLOAT,
+    draft_m                 FLOAT,
+    hull_material           TEXT,
+    -- Propulsion
+    engine_manufacturer     TEXT,
+    engine_model            TEXT,
+    engine_type             TEXT,
+    engine_power_kw         FLOAT,
+    engine_serial           TEXT,
+    engine_year             INTEGER,
+    num_engines             INTEGER DEFAULT 1,
+    -- Electrical
+    battery_capacity_ah     FLOAT,
+    battery_type            TEXT,
+    -- NMEA auto-detected (from PGN 126996 Product Information)
+    nmea_product_name       TEXT,
+    nmea_manufacturer_code  TEXT,
+    nmea_model_id           TEXT,
+    nmea_software_version   TEXT,
+    nmea_serial_number      TEXT,
+    -- Meta
+    first_seen              TIMESTAMPTZ DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ DEFAULT NOW(),
+    notes                   TEXT
+);

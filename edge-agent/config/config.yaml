@@ -23,6 +23,9 @@ buffer:
 
 pgn:
   subscriptions:
+    - pgn: 126996
+      topic: "system/product"
+      sample_interval: 300
     - pgn: 127488
       topic: "engine/rapid"
       sample_interval: 1
