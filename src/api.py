@@ -63,12 +63,23 @@ async def get_vessel(vessel_id: str):
         return dict(row)
 
 @app.get("/api/vessels/{vessel_id}/telemetry")
-async def get_telemetry(vessel_id: str, topic: str = None, limit: int = 100):
+async def get_telemetry(vessel_id: str, topic: str = None, limit: int = 500, since: Optional[str] = None):
     async with db_pool.acquire() as conn:
-        if topic:
+        since_dt = datetime.fromisoformat(since) if since else None
+        if topic and since_dt:
+            rows = await conn.fetch(
+                "SELECT * FROM telemetry WHERE vessel_id = $1 AND topic = $2 AND time >= $3 ORDER BY time DESC LIMIT $4",
+                vessel_id, topic, since_dt, limit
+            )
+        elif topic:
             rows = await conn.fetch(
                 "SELECT * FROM telemetry WHERE vessel_id = $1 AND topic = $2 ORDER BY time DESC LIMIT $3",
                 vessel_id, topic, limit
+            )
+        elif since_dt:
+            rows = await conn.fetch(
+                "SELECT * FROM telemetry WHERE vessel_id = $1 AND time >= $2 ORDER BY time DESC LIMIT $3",
+                vessel_id, since_dt, limit
             )
         else:
             rows = await conn.fetch(

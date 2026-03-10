@@ -5,6 +5,7 @@ let activeVesselId = null;
 let activeSocket   = null;
 let telemetryChart = null;
 let activeTab      = { topic: 'propulsion/0/revolutions', field: 'rpm', label: 'RPM' };
+let activeRange    = '1h';
 let currentView    = 'empty'; // 'empty' | 'dashboard' | 'alerts'
 
 const METRIC_LABELS = {
@@ -30,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadAlertBadge();
   setInterval(loadAlertBadge, 30_000);
   setupTabs();
+  setupRangeFilter();
   setupMobileDrawer();
 });
 
@@ -195,10 +197,29 @@ function setValue(id, text) {
 }
 
 // ── Telemetry chart ───────────────────────────────────────────────────────────
+function rangeToSince(range) {
+  const now = new Date();
+  if (range === 'today') {
+    const d = new Date(now);
+    d.setHours(0, 0, 0, 0);
+    return d.toISOString();
+  }
+  const map = { '1h': 3600, '24h': 86400, '7d': 604800, '30d': 2592000 };
+  const secs = map[range] ?? 3600;
+  return new Date(now - secs * 1000).toISOString();
+}
+
+function rangeTimeFormat(range) {
+  if (range === '1h') return (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (range === 'today' || range === '24h') return (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return (iso) => new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
 async function loadTelemetryChart(vesselId, topic, field, label) {
   let rows;
   try {
-    const res = await fetch(`${API}/api/vessels/${vesselId}/telemetry?topic=${encodeURIComponent(topic)}&limit=60`);
+    const since = rangeToSince(activeRange);
+    const res = await fetch(`${API}/api/vessels/${vesselId}/telemetry?topic=${encodeURIComponent(topic)}&since=${encodeURIComponent(since)}&limit=1000`);
     rows = await res.json();
   } catch {
     rows = [];
@@ -207,7 +228,8 @@ async function loadTelemetryChart(vesselId, topic, field, label) {
   // rows come newest-first; reverse for chronological order
   rows.reverse();
 
-  const labels = rows.map(r => formatTime(r.time));
+  const fmt    = rangeTimeFormat(activeRange);
+  const labels = rows.map(r => fmt(r.time));
   const data   = rows.map(r => {
     try {
       const p = typeof r.payload === 'string' ? JSON.parse(r.payload) : r.payload;
@@ -284,6 +306,19 @@ function setupTabs() {
         field: btn.dataset.field,
         label: btn.dataset.label,
       };
+      if (activeVesselId) {
+        loadTelemetryChart(activeVesselId, activeTab.topic, activeTab.field, activeTab.label);
+      }
+    });
+  });
+}
+
+function setupRangeFilter() {
+  document.querySelectorAll('.range-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeRange = btn.dataset.range;
       if (activeVesselId) {
         loadTelemetryChart(activeVesselId, activeTab.topic, activeTab.field, activeTab.label);
       }
