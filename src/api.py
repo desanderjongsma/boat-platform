@@ -51,13 +51,13 @@ app.add_middleware(
 @app.get("/api/vessels")
 async def list_vessels():
     async with db_pool.acquire() as conn:
-        rows = await conn.fetch("SELECT DISTINCT vessel_id, MAX(time) as last_seen FROM telemetry GROUP BY vessel_id")
+        rows = await conn.fetch("SELECT vessel_id, MAX(time) as last_seen FROM telemetry GROUP BY vessel_id")
         return [dict(r) for r in rows]
 
 @app.get("/api/vessels/{vessel_id}")
 async def get_vessel(vessel_id: str):
     async with db_pool.acquire() as conn:
-        row = await conn.fetchrow("SELECT DISTINCT vessel_id, MAX(time) as last_seen FROM telemetry GROUP BY vessel_id WHERE vessel_id = $1", vessel_id)
+        row = await conn.fetchrow("SELECT vessel_id, MAX(time) as last_seen FROM telemetry WHERE vessel_id = $1 GROUP BY vessel_id", vessel_id)
         if not row:
             raise HTTPException(404, "Vessel not found")
         return dict(row)
@@ -83,12 +83,35 @@ async def websocket_endpoint(websocket: WebSocket, vessel_id: str):
     try:
         while True:
             async with db_pool.acquire() as conn:
-                row = await conn.fetchrow("SELECT DISTINCT vessel_id, MAX(time) as last_seen FROM telemetry GROUP BY vessel_id WHERE vessel_id = $1", vessel_id)
+                row = await conn.fetchrow(
+                    "SELECT vessel_id, MAX(time) as last_seen FROM telemetry WHERE vessel_id = $1 GROUP BY vessel_id",
+                    vessel_id
+                )
                 if row:
-                    data = dict(row)
-                    for key, val in data.items():
-                        if isinstance(val, datetime):
-                            data[key] = val.isoformat()
+                    data = {"vessel_id": vessel_id, "online": True}
+                    data["last_seen"] = row["last_seen"].isoformat()
+                    # Haal meest recente waarde per topic
+                    topics = await conn.fetch(
+                        """SELECT DISTINCT ON (topic) topic, payload
+                           FROM telemetry WHERE vessel_id = $1
+                           ORDER BY topic, time DESC""",
+                        vessel_id
+                    )
+                    for t in topics:
+                        import json as _json
+                        p = _json.loads(t["payload"]) if isinstance(t["payload"], str) else t["payload"]
+                        val = p.get("value")
+                        topic = t["topic"]
+                        if topic == "propulsion/0/revolutions":
+                            data["rpm"] = val
+                        elif topic == "electrical/batteries/0/voltage":
+                            data["battery_voltage"] = val
+                        elif topic == "navigation/speedOverGround":
+                            data["speed_kn"] = val
+                        elif topic == "navigation/position":
+                            if isinstance(val, dict):
+                                data["latitude"] = val.get("lat")
+                                data["longitude"] = val.get("lon")
                     await websocket.send_json(data)
             await asyncio.sleep(1)
     except WebSocketDisconnect:
