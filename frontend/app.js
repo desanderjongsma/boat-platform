@@ -4,7 +4,7 @@ const WS  = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.
 let activeVesselId = null;
 let activeSocket   = null;
 let telemetryChart = null;
-let activeTab      = { topic: 'engine/rapid', field: 'rpm', label: 'RPM' };
+let activeTab      = { topic: 'propulsion/0/revolutions', field: 'rpm', label: 'RPM' };
 let currentView    = 'empty'; // 'empty' | 'dashboard' | 'alerts'
 
 const METRIC_LABELS = {
@@ -198,7 +198,7 @@ function setValue(id, text) {
 async function loadTelemetryChart(vesselId, topic, field, label) {
   let rows;
   try {
-    const res = await fetch(`${API}/api/vessels/${vesselId}/telemetry?topic=${encodeURIComponent(`vessels/${vesselId}/${topic}`)}&limit=60`);
+    const res = await fetch(`${API}/api/vessels/${vesselId}/telemetry?topic=${encodeURIComponent(topic)}&limit=60`);
     rows = await res.json();
   } catch {
     rows = [];
@@ -209,8 +209,10 @@ async function loadTelemetryChart(vesselId, topic, field, label) {
 
   const labels = rows.map(r => formatTime(r.time));
   const data   = rows.map(r => {
-    const p = r.payload;
-    return p != null ? (p[field] ?? null) : null;
+    try {
+      const p = typeof r.payload === 'string' ? JSON.parse(r.payload) : r.payload;
+      return p != null ? (p['value'] ?? null) : null;
+    } catch { return null; }
   });
 
   renderChart(labels, data, label);
