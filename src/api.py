@@ -51,13 +51,13 @@ app.add_middleware(
 @app.get("/api/vessels")
 async def list_vessels():
     async with db_pool.acquire() as conn:
-        rows = await conn.fetch("SELECT * FROM vessel_status")
+        rows = await conn.fetch("SELECT DISTINCT vessel_id, MAX(time) as last_seen FROM telemetry GROUP BY vessel_id")
         return [dict(r) for r in rows]
 
 @app.get("/api/vessels/{vessel_id}")
 async def get_vessel(vessel_id: str):
     async with db_pool.acquire() as conn:
-        row = await conn.fetchrow("SELECT * FROM vessel_status WHERE vessel_id = $1", vessel_id)
+        row = await conn.fetchrow("SELECT DISTINCT vessel_id, MAX(time) as last_seen FROM telemetry GROUP BY vessel_id WHERE vessel_id = $1", vessel_id)
         if not row:
             raise HTTPException(404, "Vessel not found")
         return dict(row)
@@ -83,7 +83,7 @@ async def websocket_endpoint(websocket: WebSocket, vessel_id: str):
     try:
         while True:
             async with db_pool.acquire() as conn:
-                row = await conn.fetchrow("SELECT * FROM vessel_status WHERE vessel_id = $1", vessel_id)
+                row = await conn.fetchrow("SELECT DISTINCT vessel_id, MAX(time) as last_seen FROM telemetry GROUP BY vessel_id WHERE vessel_id = $1", vessel_id)
                 if row:
                     data = dict(row)
                     for key, val in data.items():
