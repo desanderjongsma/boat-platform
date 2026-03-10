@@ -10,10 +10,12 @@ import json
 import time
 import sqlite3
 import struct
-from typing import Dict, Any
+from typing import Optional, Dict, Any
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(name)s %(levelname)s %(message)s')
 logger = logging.getLogger("edge_agent")
+
+# ── PGN Decoders ──────────────────────────────────────────────────────────────
 
 def decode_127488(data):
     if len(data) < 3: return {}
@@ -24,7 +26,11 @@ def decode_127489(data):
     if len(data) < 8: return {}
     def u16(o): v = struct.unpack_from("<H", data, o)[0]; return None if v == 0xFFFF else v
     def kelvin(o): v = u16(o); return round(v * 0.01 - 273.15, 1) if v else None
-    return {"oil_pressure_kpa": u16(1), "coolant_temp_c": kelvin(5)}
+    return {
+        "oil_pressure_kpa": u16(1),
+        "coolant_temp_c": kelvin(5),
+        "fuel_rate_lph": round(struct.unpack_from("<h", data, 9)[0] * 0.1, 1) if len(data) > 10 else None,
+    }
 
 def decode_129029(data):
     if len(data) < 43: return {}
@@ -38,8 +44,13 @@ def decode_129026(data):
     sog = struct.unpack_from("<H", data, 4)[0]
     return {
         "cog_deg": round(cog * 0.0001 * 57.2958, 1) if cog != 0xFFFF else None,
-        "sog_kn": round(sog * 0.01 * 1.944, 2) if sog != 0xFFFF else None
+        "sog_kn":  round(sog * 0.01 * 1.944, 2) if sog != 0xFFFF else None,
     }
+
+def decode_128259(data):
+    if len(data) < 6: return {}
+    stw = struct.unpack_from("<H", data, 2)[0]
+    return {"speed_through_water_kn": round(stw * 0.01 * 1.944, 2) if stw != 0xFFFF else None}
 
 def decode_128267(data):
     if len(data) < 5: return {}
@@ -49,10 +60,12 @@ def decode_128267(data):
 def decode_127508(data):
     if len(data) < 8: return {}
     voltage = struct.unpack_from("<H", data, 2)[0]
+    current = struct.unpack_from("<h", data, 4)[0]
     soc = struct.unpack_from("<H", data, 6)[0]
     return {
         "voltage": round(voltage * 0.01, 2) if voltage != 0xFFFF else None,
-        "state_of_charge": round(soc * 0.004, 1) if soc != 0xFFFF else None
+        "current": round(current * 0.1, 1) if current != 0x7FFF else None,
+        "state_of_charge": round(soc * 0.004, 1) if soc != 0xFFFF else None,
     }
 
 PGN_DECODERS = {
@@ -60,15 +73,22 @@ PGN_DECODERS = {
     127489: decode_127489,
     129029: decode_129029,
     129026: decode_129026,
+    128259: decode_128259,
     128267: decode_128267,
     127508: decode_127508,
 }
 
+# ── NMEA 2000 Frame Parser ────────────────────────────────────────────────────
+
 def parse_n2k_frame(msg: can.Message):
     can_id = msg.arbitration_id
     pgn_raw = (can_id >> 8) & 0x3FFFF
+    dst = (pgn_raw & 0xFF) if (pgn_raw >> 8) < 0xF0 else 0xFF
     pgn = pgn_raw if (pgn_raw >> 8) >= 0xF0 else (pgn_raw & 0x1FF00)
-    return pgn, can_id & 0xFF, 0xFF, msg.data
+    src = can_id & 0xFF
+    return pgn, src, dst, msg.data
+
+# ── Store & Forward ───────────────────────────────────────────────────────────
 
 class Buffer:
     def __init__(self, db_path: str, max_messages: int = 100000):
@@ -80,32 +100,42 @@ class Buffer:
 
     def push(self, topic: str, payload: str):
         self.conn.execute("INSERT INTO q (topic, payload, ts) VALUES (?,?,?)", (topic, payload, time.time()))
+        self.conn.execute(f"DELETE FROM q WHERE id IN (SELECT id FROM q ORDER BY id ASC LIMIT MAX(0, (SELECT COUNT(*) FROM q) - {self.max_messages}))")
         self.conn.commit()
 
     def pop_batch(self, n: int = 50):
-        return self.conn.execute("SELECT id, topic, payload FROM q ORDER BY id ASC LIMIT ?", (n,)).fetchall()
+        rows = self.conn.execute("SELECT id, topic, payload FROM q ORDER BY id ASC LIMIT ?", (n,)).fetchall()
+        return rows
 
     def delete(self, ids):
         self.conn.execute(f"DELETE FROM q WHERE id IN ({','.join('?'*len(ids))})", ids)
         self.conn.commit()
 
     @property
-    def size(self):
-        return self.conn.execute("SELECT COUNT(*) FROM q").fetchone()[0]
+    def size(self): return self.conn.execute("SELECT COUNT(*) FROM q").fetchone()[0]
+
+# ── Edge Agent ────────────────────────────────────────────────────────────────
 
 class EdgeAgent:
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.vessel_id = config["vessel"]["id"]
+        self.topic_prefix = config["mqtt"]["topic_prefix"]
         self.running = False
+
+        # PGN filter & sample rates
         subs = config.get("pgn", {}).get("subscriptions", [])
         self.topic_map = {s["pgn"]: s["topic"] for s in subs}
         self.sample_intervals = {s["pgn"]: s.get("sample_interval", 0) for s in subs}
-        self.last_publish: Dict[int, float] = {}
+        self.last_publish = {}
+
+        # Buffer
         buf_cfg = config.get("buffer", {})
-        self.buffer = Buffer(buf_cfg.get("db_path", "/tmp/buffer.db"))
+        self.buffer = Buffer(buf_cfg.get("db_path", "/tmp/buffer.db"), buf_cfg.get("max_messages", 100000))
+
+        # MQTT
         mqtt_cfg = config["mqtt"]
-        self.prefix = mqtt_cfg["topic_prefix"]
+        self.mqtt_topic_prefix = mqtt_cfg["topic_prefix"]
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=mqtt_cfg["client_id"])
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
@@ -123,11 +153,14 @@ class EdgeAgent:
 
     def publish(self, sub_topic: str, payload: dict, pgn: int):
         now = time.time()
-        if now - self.last_publish.get(pgn, 0) < self.sample_intervals.get(pgn, 0):
+        interval = self.sample_intervals.get(pgn, 0)
+        if now - self.last_publish.get(pgn, 0) < interval:
             return
         self.last_publish[pgn] = now
-        topic = f"{self.prefix}/{sub_topic}"
+
+        topic = f"{self.mqtt_topic_prefix}/{sub_topic}"
         msg = json.dumps({"pgn": pgn, "timestamp": now, "fields": payload})
+
         if self.connected:
             self.client.publish(topic, msg, qos=1)
         else:
@@ -140,6 +173,7 @@ class EdgeAgent:
                 for row_id, topic, payload in batch:
                     self.client.publish(topic, payload, qos=1)
                 self.buffer.delete([r[0] for r in batch])
+                logger.info("Drained %d buffered messages", len(batch))
             await asyncio.sleep(2)
 
     async def heartbeat(self):
@@ -147,7 +181,7 @@ class EdgeAgent:
         while self.running:
             if self.connected:
                 self.client.publish(
-                    f"{self.prefix}/system/status",
+                    f"{self.mqtt_topic_prefix}/system/status",
                     json.dumps({"status": "online", "buffer_size": self.buffer.size, "timestamp": time.time()}),
                     qos=1
                 )
@@ -156,18 +190,22 @@ class EdgeAgent:
     async def run(self):
         self.running = True
         can_cfg = self.config["can"]
-        bus = can.interface.Bus(
-            channel=can_cfg["interface"],
-            interface=can_cfg["bustype"],
-            bitrate=can_cfg["bitrate"]
-        )
+        bus = can.interface.Bus(channel=can_cfg["interface"], interface=can_cfg["bustype"], bitrate=can_cfg["bitrate"])
         logger.info("CAN bus open on %s", can_cfg["interface"])
+
         loop = asyncio.get_event_loop()
         asyncio.create_task(self.drain_buffer())
         asyncio.create_task(self.heartbeat())
-        loop.add_signal_handler(signal.SIGTERM, lambda: setattr(self, "running", False))
-        loop.add_signal_handler(signal.SIGINT, lambda: setattr(self, "running", False))
+
+        def stop():
+            self.running = False
+            bus.shutdown()
+
+        loop.add_signal_handler(signal.SIGTERM, stop)
+        loop.add_signal_handler(signal.SIGINT, stop)
+
         logger.info("Edge agent running — vessel: %s", self.vessel_id)
+
         while self.running:
             msg = await loop.run_in_executor(None, bus.recv, 1.0)
             if msg is None:
@@ -180,15 +218,18 @@ class EdgeAgent:
                     fields = decoder(data)
                     if fields:
                         self.publish(sub_topic, fields, pgn)
-        bus.shutdown()
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="/opt/edge-agent/config/config.yaml")
     args = parser.parse_args()
+
     with open(args.config) as f:
         config = yaml.safe_load(f)
-    logging.getLogger().setLevel(config.get("logging", {}).get("level", "INFO"))
+
+    level = config.get("logging", {}).get("level", "INFO")
+    logging.getLogger().setLevel(level)
+
     asyncio.run(EdgeAgent(config).run())
 
 if __name__ == "__main__":

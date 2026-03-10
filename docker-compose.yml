@@ -12,6 +12,7 @@ services:
       - mqtt_data:/mosquitto/data
       - mqtt_log:/mosquitto/log
     restart: unless-stopped
+    mem_limit: 128m
 
   timescaledb:
     image: timescale/timescaledb:latest-pg16
@@ -22,10 +23,14 @@ services:
       POSTGRES_USER: boatplatform
       POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme_db}
       POSTGRES_DB: boats
+      POSTGRES_SHARED_BUFFERS: 256MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 512MB
+    command: postgres -c shared_buffers=256MB -c effective_cache_size=512MB -c work_mem=16MB -c maintenance_work_mem=64MB
     volumes:
       - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/01_init.sql
       - db_data:/var/lib/postgresql/data
     restart: unless-stopped
+    mem_limit: 1g
 
   bridge:
     build:
@@ -44,6 +49,7 @@ services:
       DB_USER: boatplatform
       DB_PASSWORD: ${DB_PASSWORD:-changeme_db}
     restart: unless-stopped
+    mem_limit: 128m
 
   api:
     build:
@@ -63,6 +69,7 @@ services:
       MQTT_BROKER: mqtt
       MQTT_PORT: 1883
     restart: unless-stopped
+    mem_limit: 512m
 
   frontend:
     build:
@@ -74,6 +81,7 @@ services:
     depends_on:
       - api
     restart: unless-stopped
+    mem_limit: 64m
 
 volumes:
   mqtt_data:
