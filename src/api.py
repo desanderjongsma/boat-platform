@@ -146,21 +146,23 @@ async def websocket_endpoint(websocket: WebSocket, vessel_id: str):
                            ORDER BY topic, time DESC""",
                         vessel_id
                     )
+                    import json as _json
                     for t in topics:
-                        import json as _json
                         p = _json.loads(t["payload"]) if isinstance(t["payload"], str) else t["payload"]
-                        val = p.get("value")
+                        fields = p.get("fields", {})
                         topic = t["topic"]
-                        if topic == "propulsion/0/revolutions":
-                            data["rpm"] = val
-                        elif topic == "electrical/batteries/0/voltage":
-                            data["battery_voltage"] = val
-                        elif topic == "navigation/speedOverGround":
-                            data["speed_kn"] = val
-                        elif topic == "navigation/position":
-                            if isinstance(val, dict):
-                                data["latitude"] = val.get("lat")
-                                data["longitude"] = val.get("lon")
+                        if topic == "engine/rapid":
+                            data["rpm"] = fields.get("rpm")
+                        elif topic == "engine/parameters":
+                            data["coolant_temp_c"] = fields.get("coolant_temp_c")
+                        elif topic == "electrical/battery":
+                            data["battery_voltage"] = fields.get("voltage")
+                            data["battery_soc"] = fields.get("state_of_charge")
+                        elif topic == "navigation/gnss":
+                            data["latitude"] = fields.get("latitude")
+                            data["longitude"] = fields.get("longitude")
+                        elif topic == "navigation/depth":
+                            data["depth_m"] = fields.get("depth_m")
                     await websocket.send_json(data)
             await asyncio.sleep(1)
     except WebSocketDisconnect:
@@ -207,7 +209,6 @@ class VesselProfileUpdate(BaseModel):
 
 @app.get("/api/settings/profiles")
 async def list_profiles():
-    """All vessel profiles with last_seen from telemetry."""
     async with db_pool.acquire() as conn:
         rows = await conn.fetch("""
             SELECT vp.*, t.last_seen
@@ -245,7 +246,6 @@ async def get_profile(vessel_id: str):
 async def upsert_profile(vessel_id: str, body: VesselProfileUpdate):
     fields = {k: v for k, v in body.model_dump().items() if v is not None}
     async with db_pool.acquire() as conn:
-        # Ensure row exists
         await conn.execute(
             "INSERT INTO vessel_profiles (vessel_id) VALUES ($1) ON CONFLICT DO NOTHING",
             vessel_id
