@@ -275,6 +275,13 @@ async def list_alert_rules(vessel_id: str):
         )
         return [dict(r) for r in rows]
 
+def _check_condition(value, operator, threshold):
+    if operator == 'gt':  return value > threshold
+    if operator == 'lt':  return value < threshold
+    if operator == 'gte': return value >= threshold
+    if operator == 'lte': return value <= threshold
+    return False
+
 @app.post("/api/vessels/{vessel_id}/alert-rules", status_code=201)
 async def create_alert_rule(vessel_id: str, rule: AlertRuleCreate):
     async with db_pool.acquire() as conn:
@@ -283,7 +290,24 @@ async def create_alert_rule(vessel_id: str, rule: AlertRuleCreate):
                VALUES ($1, $2, $3, $4, $5, $6) RETURNING *""",
             vessel_id, rule.name, rule.metric, rule.operator, rule.threshold, rule.severity
         )
-        return dict(row)
+        new_rule = dict(row)
+        # Immediately evaluate against current vessel_status so an alert
+        # fires without waiting for the next MQTT message.
+        status_row = await conn.fetchrow(
+            "SELECT * FROM vessel_status WHERE vessel_id = $1", vessel_id
+        )
+        if status_row:
+            val = status_row.get(rule.metric)
+            if val is not None and _check_condition(val, rule.operator, rule.threshold):
+                await conn.execute(
+                    """INSERT INTO alerts (vessel_id, rule_id, rule_name, metric, value,
+                       threshold, operator, severity)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
+                    vessel_id, new_rule["id"], rule.name, rule.metric,
+                    val, rule.threshold, rule.operator, rule.severity
+                )
+                logger.info("Alert triggered on rule create: %s (vessel=%s, value=%s)", rule.name, vessel_id, val)
+        return new_rule
 
 @app.patch("/api/alert-rules/{rule_id}")
 async def toggle_alert_rule(rule_id: int, body: AlertRuleToggle):

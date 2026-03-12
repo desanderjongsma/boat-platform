@@ -392,6 +392,38 @@ html, body {
 /* ── Alerts view ─────────────────────────────────── */
 .alerts-view { display: flex; flex-direction: column; }
 
+/* ── Alert tabs ──────────────────────────────────── */
+.alerts-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+}
+
+.alerts-tab {
+  padding: 8px 18px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.alerts-tab:hover { color: var(--text); }
+
+.alerts-tab.active-tab {
+  color: var(--cobalt-ui);
+  border-bottom-color: var(--cobalt-ui);
+}
+
 /* ── Alert stat cards ────────────────────────────── */
 .alert-stats-row {
   display: grid;

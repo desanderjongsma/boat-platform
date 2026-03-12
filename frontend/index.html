@@ -89,19 +89,21 @@
           </div>
         </div>
 
-        <div class="section-block">
-          <div class="section-title-row">
-            <h2 class="section-title">Active Alerts</h2>
-            <span id="active-count-chip" class="count-chip">0</span>
-          </div>
+        <div class="alerts-tabs">
+          <button id="tab-active"   class="alerts-tab active-tab" onclick="switchAlertsTab('active')">
+            Active <span id="active-count-chip" class="count-chip">0</span>
+          </button>
+          <button id="tab-resolved" class="alerts-tab" onclick="switchAlertsTab('resolved')">
+            Resolved
+          </button>
+        </div>
+
+        <div id="panel-active" class="section-block">
           <div id="active-alerts-container"><p class="empty-hint">No active alerts</p></div>
         </div>
 
-        <div class="section-block">
-          <div class="section-title-row">
-            <h2 class="section-title">Recent History</h2>
-          </div>
-          <div id="history-alerts-container"><p class="empty-hint">No recent alerts</p></div>
+        <div id="panel-resolved" class="section-block hidden">
+          <div id="history-alerts-container"><p class="empty-hint">No resolved alerts</p></div>
         </div>
       </div>
 

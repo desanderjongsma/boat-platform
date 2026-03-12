@@ -437,6 +437,14 @@ function renderHistoryAlerts(alerts) {
     </div>`;
 }
 
+function switchAlertsTab(tab) {
+  const isActive = tab === 'active';
+  document.getElementById('tab-active').classList.toggle('active-tab', isActive);
+  document.getElementById('tab-resolved').classList.toggle('active-tab', !isActive);
+  document.getElementById('panel-active').classList.toggle('hidden', !isActive);
+  document.getElementById('panel-resolved').classList.toggle('hidden', isActive);
+}
+
 async function acknowledgeAlert(id) {
   try {
     await fetch(`${API}/api/alerts/${id}/acknowledge`, { method: 'POST' });
