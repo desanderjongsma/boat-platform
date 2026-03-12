@@ -1,6 +1,4 @@
-def on_message(client, userdata, msg):
-    logger.info("MSG: %s", msg.topic)  # ← voeg deze regel toe
-    conn = userdata["db"]import os
+import os
 import json
 import time
 import logging
@@ -18,7 +16,6 @@ DB_NAME = os.getenv("DB_NAME", "boats")
 DB_USER = os.getenv("DB_USER", "boatplatform")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "changeme_db")
 
-# Track vessels already registered in this session to avoid redundant DB calls
 _registered_vessels: set = set()
 
 def get_db_connection():
@@ -34,7 +31,6 @@ def get_db_connection():
     raise RuntimeError("Could not connect to database")
 
 def ensure_vessel_profile(conn, vessel_id):
-    """Auto-register a vessel profile on first contact."""
     if vessel_id in _registered_vessels:
         return
     try:
@@ -51,7 +47,6 @@ def ensure_vessel_profile(conn, vessel_id):
         conn.rollback()
 
 def update_vessel_nmea_info(conn, vessel_id, fields):
-    """Update NMEA auto-detected product info on the vessel profile."""
     updates = {}
     if fields.get("product_name"):
         updates["nmea_product_name"] = fields["product_name"]
@@ -86,7 +81,6 @@ def check_condition(value, operator, threshold):
     return False
 
 def evaluate_alerts(conn, vessel_id):
-    """Check all enabled alert rules for a vessel against current status."""
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT * FROM vessel_status WHERE vessel_id = %s", (vessel_id,))
@@ -94,26 +88,22 @@ def evaluate_alerts(conn, vessel_id):
             if not row:
                 return
             status = dict(zip([d[0] for d in cur.description], row))
-
             cur.execute(
                 "SELECT id, name, metric, operator, threshold, severity "
                 "FROM alert_rules WHERE vessel_id = %s AND enabled = TRUE",
                 (vessel_id,)
             )
             rules = [dict(zip([d[0] for d in cur.description], r)) for r in cur.fetchall()]
-
             for rule in rules:
                 val = status.get(rule['metric'])
                 if val is None:
                     continue
                 triggered = check_condition(val, rule['operator'], rule['threshold'])
-
                 cur.execute(
                     "SELECT id FROM alerts WHERE rule_id = %s AND resolved_at IS NULL",
                     (rule['id'],)
                 )
                 active = cur.fetchone()
-
                 if triggered and not active:
                     cur.execute(
                         "INSERT INTO alerts (vessel_id, rule_id, rule_name, metric, value, "
@@ -140,6 +130,7 @@ def on_connect(client, userdata, flags, reason_code, properties):
         logger.error("MQTT connection failed: %s", reason_code)
 
 def on_message(client, userdata, msg):
+    logger.info("MSG: %s", msg.topic)
     conn = userdata["db"]
     try:
         payload = json.loads(msg.payload.decode())
@@ -155,7 +146,6 @@ def on_message(client, userdata, msg):
     pgn = payload.get("pgn", 0)
     fields = payload.get("fields", {})
 
-    # Auto-register vessel profile on first contact
     ensure_vessel_profile(conn, vessel_id)
 
     try:
@@ -164,7 +154,6 @@ def on_message(client, userdata, msg):
                 "INSERT INTO telemetry (time, vessel_id, topic, pgn, payload) VALUES (NOW(), %s, %s, %s, %s)",
                 (vessel_id, sub_topic, pgn, json.dumps(payload))
             )
-
             updates = {}
             if sub_topic == "engine/rapid":
                 updates["rpm"] = fields.get("rpm")
@@ -189,7 +178,6 @@ def on_message(client, userdata, msg):
                 )
         conn.commit()
 
-        # Handle NMEA product info (PGN 126996)
         if sub_topic == "system/product":
             update_vessel_nmea_info(conn, vessel_id, fields)
 
@@ -202,7 +190,6 @@ def on_message(client, userdata, msg):
 def main():
     conn = get_db_connection()
     logger.info("Connected to TimescaleDB")
-
     client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2, client_id="boat-bridge")
     client.user_data_set({"db": conn})
     client.on_connect = on_connect
