@@ -7,6 +7,7 @@ let telemetryChart = null;
 let activeTab      = { topic: 'engine/rapid', field: 'rpm', label: 'RPM' };
 let activeRange    = '1h';
 let currentView    = 'empty'; // 'empty' | 'dashboard' | 'alerts'
+let alertsData     = { active: [], history: [] }; // raw data for filtering
 
 const METRIC_LABELS = {
   coolant_temp_c:  'Coolant Temp',
@@ -365,10 +366,42 @@ async function loadAlerts() {
     history = await r2.json();
   } catch { /* network error - leave empty */ }
 
+  alertsData = { active, history };
   renderAlertStats(active);
-  renderActiveAlerts(active);
-  renderHistoryAlerts(history);
+  applyAlertsFilter();
   updateAlertBadge(active.length);
+}
+
+function applyAlertsFilter() {
+  const q        = (document.getElementById('alert-search')?.value || '').toLowerCase().trim();
+  const severity = document.getElementById('alert-severity-filter')?.value || '';
+  const ackState = document.getElementById('alert-ack-filter')?.value || '';
+
+  function matchesFilters(a, includeAck) {
+    const textMatch = !q ||
+      a.vessel_id.toLowerCase().includes(q) ||
+      a.rule_name.toLowerCase().includes(q) ||
+      (METRIC_LABELS[a.metric] || a.metric).toLowerCase().includes(q);
+    const sevMatch = !severity || a.severity === severity;
+    const ackMatch = !includeAck || !ackState ||
+      (ackState === 'acked' ? a.acknowledged : !a.acknowledged);
+    return textMatch && sevMatch && ackMatch;
+  }
+
+  const filteredActive  = alertsData.active.filter(a => matchesFilters(a, true));
+  const filteredHistory = alertsData.history.filter(a => matchesFilters(a, false));
+
+  // Update count badge
+  const countEl = document.getElementById('alert-filter-count');
+  if (countEl) {
+    const hasFilter = q || severity || ackState;
+    countEl.textContent = hasFilter
+      ? `${filteredActive.length} / ${alertsData.active.length} active`
+      : '';
+  }
+
+  renderActiveAlerts(filteredActive);
+  renderHistoryAlerts(filteredHistory);
 }
 
 function renderAlertStats(active) {

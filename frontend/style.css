@@ -468,6 +468,50 @@ html, body {
 .alert-stat-card.stat-info { border-top: 2px solid var(--cobalt-ui); }
 .alert-stat-card.stat-info .stat-value { color: var(--cobalt-ui); }
 
+/* ── Alerts filter bar ───────────────────────────── */
+.alerts-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.alert-search-input {
+  flex: 1;
+  min-width: 180px;
+  padding: 7px 10px;
+  background: var(--bg-ice);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  outline: none;
+}
+.alert-search-input:focus { border-color: var(--cobalt-ui); }
+.alert-search-input::placeholder { color: var(--text-xsoft); }
+
+.alert-filter-select {
+  padding: 7px 10px;
+  background: var(--bg-ice);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-mid);
+  font-family: var(--sans);
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+}
+.alert-filter-select:focus { border-color: var(--cobalt-ui); }
+
+.alert-filter-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-xsoft);
+  white-space: nowrap;
+}
+
 /* ── Severity badges ─────────────────────────────── */
 .sev-badge {
   display: inline-block;

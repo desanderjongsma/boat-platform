@@ -98,6 +98,23 @@
           </button>
         </div>
 
+        <!-- Search & filter bar -->
+        <div class="alerts-filter-bar">
+          <input type="search" id="alert-search" class="alert-search-input" placeholder="Search vessel or rule…" oninput="applyAlertsFilter()">
+          <select id="alert-severity-filter" class="alert-filter-select" onchange="applyAlertsFilter()">
+            <option value="">All severities</option>
+            <option value="critical">Critical</option>
+            <option value="warning">Warning</option>
+            <option value="info">Info</option>
+          </select>
+          <select id="alert-ack-filter" class="alert-filter-select" onchange="applyAlertsFilter()">
+            <option value="">All</option>
+            <option value="unacked">Unacknowledged</option>
+            <option value="acked">Acknowledged</option>
+          </select>
+          <span id="alert-filter-count" class="alert-filter-count"></span>
+        </div>
+
         <div id="panel-active" class="section-block">
           <div id="active-alerts-container"><p class="empty-hint">No active alerts</p></div>
         </div>
