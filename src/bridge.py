@@ -1,4 +1,6 @@
-import os
+def on_message(client, userdata, msg):
+    logger.info("MSG: %s", msg.topic)  # ← voeg deze regel toe
+    conn = userdata["db"]import os
 import json
 import time
 import logging
