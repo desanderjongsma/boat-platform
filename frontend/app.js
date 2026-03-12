@@ -4,7 +4,7 @@ const WS  = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.
 let activeVesselId = null;
 let activeSocket   = null;
 let telemetryChart = null;
-let activeTab      = { topic: 'propulsion/0/revolutions', field: 'rpm', label: 'RPM' };
+let activeTab      = { topic: 'engine/rapid', field: 'rpm', label: 'RPM' };
 let activeRange    = '1h';
 let currentView    = 'empty'; // 'empty' | 'dashboard' | 'alerts'
 
@@ -69,7 +69,6 @@ async function loadVessels() {
 
   renderVesselList(vessels);
 
-  // If a vessel is active, refresh its status dot
   if (activeVesselId) {
     const v = vessels.find(v => v.vessel_id === activeVesselId);
     if (v) updateStatusBadge(v.online);
@@ -104,24 +103,20 @@ function selectVessel(id) {
   activeVesselId = id;
   currentView = 'dashboard';
 
-  // Highlight sidebar item, clear nav active states
   document.querySelectorAll('.vessel-item').forEach(el => {
     el.classList.toggle('active', el.dataset.id === id);
   });
   document.getElementById('nav-alerts').classList.remove('active');
   document.getElementById('nav-settings').classList.remove('active');
 
-  // Show dashboard, hide others
   document.getElementById('empty-state').classList.add('hidden');
   document.getElementById('alerts-view').classList.add('hidden');
   document.getElementById('settings-view').classList.add('hidden');
   document.getElementById('dashboard').classList.remove('hidden');
 
-  // Update vessel ID header
   document.getElementById('vessel-title').textContent = id;
   document.getElementById('m-vesselid').textContent = id;
 
-  // Close existing WS
   if (activeSocket) {
     activeSocket.onclose = null;
     activeSocket.close();
@@ -147,7 +142,6 @@ function connectWebSocket(id) {
   };
 
   ws.onclose = () => {
-    // Reconnect after 3s if this is still the active vessel
     if (id === activeVesselId) setTimeout(() => connectWebSocket(id), 3000);
   };
 
@@ -163,20 +157,17 @@ function updateCards(d) {
   setValue('m-lon',     d.longitude != null ? d.longitude.toFixed(5) : '—');
   setValue('m-depth',   d.depth_m   != null ? `${d.depth_m.toFixed(1)} m` : '—');
 
-  // SOC with bar
   if (d.battery_soc != null) {
-    const pct = Math.min(100, Math.max(0, d.battery_soc));
+    const pct = Math.min(100, Math.max(0, d.battery_soc * 100));
     setValue('m-soc', `${pct.toFixed(1)} %`);
     document.getElementById('soc-bar').style.width = `${pct}%`;
   } else {
     setValue('m-soc', '—');
   }
 
-  // Online status
   setValue('m-online', d.online ? 'Online' : 'Offline');
   document.getElementById('m-online').style.color = d.online ? '#16A34A' : '#DC2626';
 
-  // Last seen
   const ls = d.last_seen ? formatRelative(d.last_seen) : '—';
   setValue('m-lastseen', ls);
   document.getElementById('vessel-last-seen').textContent = d.last_seen ? `Last seen ${ls}` : '';
@@ -227,7 +218,6 @@ async function loadTelemetryChart(vesselId, topic, field, label) {
     rows = [];
   }
 
-  // rows come newest-first; reverse for chronological order
   rows.reverse();
 
   const fmt    = rangeTimeFormat(activeRange);
@@ -235,7 +225,9 @@ async function loadTelemetryChart(vesselId, topic, field, label) {
   const data   = rows.map(r => {
     try {
       const p = typeof r.payload === 'string' ? JSON.parse(r.payload) : r.payload;
-      return p != null ? (p['value'] ?? null) : null;
+      if (!p) return null;
+      const fields = p['fields'] || {};
+      return fields[field] ?? null;
     } catch { return null; }
   });
 
@@ -459,7 +451,6 @@ async function loadAlertBadge() {
     const res = await fetch(`${API}/api/alerts?active=true&limit=100`);
     const alerts = await res.json();
     updateAlertBadge(alerts.length);
-    // If a vessel is selected, also refresh its banner
     if (activeVesselId && currentView === 'dashboard') {
       loadVesselAlertsBanner(activeVesselId);
     }
@@ -552,7 +543,6 @@ function showAddRuleForm() {
 
 function hideAddRuleForm() {
   document.getElementById('add-rule-form').classList.add('hidden');
-  // Clear fields
   ['rule-name', 'rule-threshold'].forEach(id => document.getElementById(id).value = '');
 }
 
@@ -862,7 +852,6 @@ async function saveProfile(vesselId) {
     });
     statusEl.textContent = '✓ Opgeslagen';
     statusEl.className = 'profile-save-status saved';
-    // Update the card header name if name was changed
     if (body.name) {
       const nameEl = document.querySelector(`#card-${vesselId} .profile-name`);
       if (nameEl) nameEl.textContent = body.name;
